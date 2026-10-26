@@ -450,25 +450,27 @@ export default function RequestForm() {
         
         {/* Company Header Notice with Operational Coverage Radius */}
         {company && (
-          <div className="mb-4 flex items-center justify-between rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center gap-3">
+          <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between shadow-xs">
+            <div className="flex items-center gap-3 min-w-0">
               {company.logoUrl ? (
-                <img src={company.logoUrl} alt={company.name} className="size-10 rounded-lg object-cover" />
+                <img src={company.logoUrl} alt={company.name} className="size-11 shrink-0 rounded-xl object-cover border border-border" />
               ) : (
-                <div className="grid size-10 place-items-center rounded-lg bg-primary/10 font-bold text-primary">
+                <div className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 font-bold text-primary border border-primary/20">
                   {company.name?.charAt(0) || "C"}
                 </div>
               )}
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">Requesting service from</p>
-                <p className="text-sm font-bold text-foreground">{company.name}</p>
+                <p className="text-sm font-bold text-foreground truncate">{company.name}</p>
               </div>
             </div>
-            <div className="text-right max-w-[280px]">
-              <span className="block text-xs font-semibold text-foreground truncate" title={fullCompanyAddress}>
-                {fullCompanyAddress}
-              </span>
-              <span className="block text-[11px] text-muted-foreground">
+
+            <div className="flex flex-col sm:items-end border-t border-border/60 pt-2.5 sm:border-t-0 sm:pt-0 min-w-0 sm:max-w-[280px]">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground truncate max-w-full" title={fullCompanyAddress}>
+                <MapPin className="size-3.5 shrink-0 text-primary" />
+                <span className="truncate">{fullCompanyAddress}</span>
+              </div>
+              <span className="mt-1 inline-flex items-center gap-1 self-start sm:self-end rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                 {company.coverageRadius ? `Coverage: ${company.coverageRadius} mi radius` : "Regional coverage"}
               </span>
             </div>
