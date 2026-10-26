@@ -237,21 +237,20 @@ export async function checkCoverage(req, res) {
 // 1. CREATE SERVICE REQUEST
 export async function createServiceRequest(req, res) {
   try {
-    const user = await resolveUser(req, res);
+    const user = req.user || (await resolveUser(req, res));
     if (!user) return;
 
+    // Use verified company and pricing from Express middleware
+    const companyPage = req.companyPage || (await CompanyPage.findOne({ _id: req.body.companyId, published: true }));
+    if (!companyPage) {
+      return res.status(404).json({ message: "Company not found or is not published" });
+    }
+
     const {
-      companyId,
-      service,
-      services,
       title,
       description,
-      workers,
+      service,
       duration,
-      durationHours,
-      totalAmount,
-      adminFee,
-      companyPayout,
       address,
       city,
       date,
@@ -259,60 +258,13 @@ export async function createServiceRequest(req, res) {
       urgency,
     } = req.body;
 
-    if (!companyId) {
-      return res.status(400).json({ message: "companyId is required" });
-    }
-
-    const companyPage = await CompanyPage.findOne({ _id: companyId, published: true });
-    if (!companyPage) {
-      return res.status(404).json({ message: "Company not found or is not published" });
-    }
-
-    const companyProfile = await Company.findOne({ owner: companyPage.owner });
-    let companyLat = companyPage.lat || companyProfile?.lat;
-    let companyLng = companyPage.lng || companyProfile?.lng;
-    const allowedRadius = companyPage.coverageRadius || companyProfile?.coverageRadius || 25;
-
-    // Coverage Area Check (Fail-Closed)
-    if (companyLat && companyLng) {
-      const custCoords = await resolveCustomerCoordinates(address, city, req);
-
-      if (!custCoords || custCoords.lat == null || custCoords.lng == null) {
-        return res.status(400).json({
-          message: "Unable to verify your address or city location. Please enter a valid address and city.",
-        });
-      }
-
-      const distanceMiles = calculateDistanceMiles(
-        companyLat,
-        companyLng,
-        custCoords.lat,
-        custCoords.lng
-      );
-
-      if (distanceMiles !== null && distanceMiles > allowedRadius) {
-        return res.status(400).json({
-          message: `Out of Service Area: Your location is approximately ${Math.round(
-            distanceMiles
-          )} miles away, but ${companyPage.name} only services up to a ${allowedRadius}-mile radius.`,
-        });
-      }
-    }
-
-    let parsedServices = [];
-    if (services) {
-      try {
-        parsedServices = typeof services === "string" ? JSON.parse(services) : services;
-      } catch (_) {
-        parsedServices = [];
-      }
-    }
-
-    const gross = Number(totalAmount) || 0;
-    const computedAdminFee = Number(adminFee) || Math.round(gross * 0.02 * 100) / 100;
-    const computedPayout = Number(companyPayout) || Math.round((gross - computedAdminFee) * 100) / 100;
-    const hours = Number(durationHours) || 8;
-    const numWorkers = Number(workers) || 1;
+    const pricing = req.bookingPricing || {};
+    const gross = pricing.totalAmount || 100;
+    const computedAdminFee = pricing.adminFee || Math.round(gross * 0.02 * 100) / 100;
+    const computedPayout = pricing.companyPayout || Math.round((gross - computedAdminFee) * 100) / 100;
+    const hours = pricing.hours || 8;
+    const numWorkers = pricing.totalWorkers || 1;
+    const parsedServices = pricing.services || [];
 
     let attachmentUrl;
     let attachmentName;
@@ -325,12 +277,12 @@ export async function createServiceRequest(req, res) {
     const requestDoc = await ServiceRequest.create({
       customer: user._id,
       company: companyPage._id,
-      service: service || "General Service",
+      service: service || parsedServices[0]?.name || "General Service",
       services: parsedServices,
-      title,
-      description,
+      title: title || "Service Request",
+      description: description || "",
       workers: numWorkers,
-      duration,
+      duration: duration || `${hours} hours`,
       durationHours: hours,
       totalAmount: gross,
       adminFee: computedAdminFee,

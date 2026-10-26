@@ -1054,7 +1054,7 @@ function ReviewAndPayStep({
           <div>
             <span className="text-xs font-bold uppercase tracking-wider text-primary">Hourly Price Calculation</span>
             <p className="text-xs text-muted-foreground">
-              Based on {pricingBreakdown.hoursLabel} ({pricingBreakdown.hours} labor-hours)
+              Based on {pricingBreakdown.hoursLabel} ({pricingBreakdown.hours * totalWorkers} total labor-hours across {totalWorkers} {totalWorkers === 1 ? "worker" : "workers"})
             </p>
           </div>
           <span className="rounded-lg bg-card border border-border px-2.5 py-1 text-xs font-bold text-foreground">
@@ -1076,7 +1076,7 @@ function ReviewAndPayStep({
           ))}
 
           <div className="border-t border-border pt-2 flex items-center justify-between text-muted-foreground">
-            <span>Platform Service &amp; Protection Fee (2% to admin)</span>
+            <span>Platform Service &amp; Protection Fee (2% to admin - included in total)</span>
             <span className="font-medium text-emerald-600">${pricingBreakdown.adminFee.toFixed(2)}</span>
           </div>
 

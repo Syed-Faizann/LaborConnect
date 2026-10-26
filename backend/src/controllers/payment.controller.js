@@ -18,40 +18,19 @@ const DURATION_HOURS_MAP = {
 // POST /api/payments/create-intent
 export async function createPaymentIntent(req, res) {
   try {
-    const { userId: clerkId } = getAuth(req);
-    if (!clerkId) return res.status(401).json({ message: "Unauthorized" });
+    const user = req.user;
+    if (!user) return res.status(401).json({ message: "Unauthorized" });
 
-    const user = await User.findOne({ clerkId });
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const { companyId, services, duration } = req.body;
-
-    const company = await CompanyPage.findById(companyId);
+    const company = req.companyPage;
     if (!company) return res.status(404).json({ message: "Company not found" });
 
-    const hours = DURATION_HOURS_MAP[duration] || 8;
+    // Use server-verified pricing from middleware
+    const { totalAmount: calculatedTotal, adminFee, companyPayout, hours, totalWorkers } =
+      req.bookingPricing || {};
 
-    // Calculate total based on each service's custom price * workers * hours
-    let calculatedTotal = 0;
-    let totalWorkers = 0;
-
-    services.forEach((s) => {
-      const match = company.services.find(
-        (cs) => cs.name.toLowerCase() === s.name.toLowerCase()
-      );
-      // Clean numeric rate e.g. "160$" -> 160
-      const rawPrice = match?.price ? parseFloat(match.price.replace(/[^0-9.]/g, "")) : 100;
-      const rate = !isNaN(rawPrice) && rawPrice > 0 ? rawPrice : 100;
-      const workers = Number(s.workers) || 1;
-
-      calculatedTotal += rate * hours * workers;
-      totalWorkers += workers;
-    });
-
-    if (calculatedTotal <= 0) calculatedTotal = 100;
-
-    const adminFee = Math.round(calculatedTotal * 0.02 * 100) / 100; // 2%
-    const companyPayout = Math.round((calculatedTotal - adminFee) * 100) / 100; // 98%
+    if (!calculatedTotal || calculatedTotal <= 0) {
+      return res.status(400).json({ message: "Invalid payment calculation." });
+    }
 
     // Create Stripe PaymentIntent in cents
     const paymentIntent = await stripe.paymentIntents.create({
@@ -86,6 +65,27 @@ export async function createPaymentIntent(req, res) {
 export async function confirmPaymentRecord(req, res) {
   try {
     const { paymentIntentId, serviceRequestId } = req.body;
+    const user = req.user;
+
+    if (!paymentIntentId || !serviceRequestId) {
+      return res.status(400).json({ message: "paymentIntentId and serviceRequestId are required." });
+    }
+
+    // Verify service request ownership
+    const serviceRequest = await ServiceRequest.findById(serviceRequestId);
+    if (!serviceRequest) {
+      return res.status(404).json({ message: "Service request not found." });
+    }
+
+    if (serviceRequest.customer.toString() !== user._id.toString() && user.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden: You do not own this service request." });
+    }
+
+    // Replay attack prevention: Ensure payment hasn't already been recorded
+    const existingPayment = await Payment.findOne({ stripePaymentIntentId: paymentIntentId });
+    if (existingPayment) {
+      return res.status(400).json({ message: "This payment has already been confirmed and processed." });
+    }
 
     const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
     if (!intent || intent.status !== "succeeded") {
@@ -102,16 +102,21 @@ export async function confirmPaymentRecord(req, res) {
       totalWorkers,
     } = intent.metadata;
 
+    // Verify metadata customer matches caller
+    if (customerId && customerId !== user._id.toString() && user.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden: Payment intent was created by another user." });
+    }
+
     const payment = await Payment.create({
       serviceRequest: serviceRequestId,
-      company: companyId,
-      customer: customerId,
+      company: companyId || serviceRequest.company,
+      customer: customerId || user._id,
       stripePaymentIntentId: paymentIntentId,
-      totalAmount: Number(totalAmount),
-      adminFee: Number(adminFee),
-      companyPayout: Number(companyPayout),
-      durationHours: Number(hours),
-      totalWorkers: Number(totalWorkers),
+      totalAmount: Number(totalAmount) || serviceRequest.totalAmount,
+      adminFee: Number(adminFee) || serviceRequest.adminFee,
+      companyPayout: Number(companyPayout) || serviceRequest.companyPayout,
+      durationHours: Number(hours) || serviceRequest.durationHours,
+      totalWorkers: Number(totalWorkers) || serviceRequest.workers,
       status: "succeeded",
     });
 

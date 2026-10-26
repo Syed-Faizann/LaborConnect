@@ -29,3 +29,21 @@ export async function protectRoute(req, res, next) {
     res.status(500).json({ message: "Internal server error" });
   }
 }
+
+/**
+ * Role Permission Middleware:
+ * Ensures only users with 'customer' (or 'admin') roles can place bookings or trigger payments.
+ */
+export function requireCustomerRole(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ message: "Unauthorized: User not authenticated." });
+  }
+
+  if (req.user.role !== "customer" && req.user.role !== "admin") {
+    return res.status(403).json({
+      message: "Forbidden: Only customer accounts are permitted to book services or initiate payments.",
+    });
+  }
+
+  next();
+}

@@ -34,6 +34,7 @@ const paymentSchema = new mongoose.Schema(
 
 paymentSchema.index({ company: 1, createdAt: -1 });
 paymentSchema.index({ customer: 1 });
+paymentSchema.index({ stripePaymentIntentId: 1 });
 
 const Payment = mongoose.model("Payment", paymentSchema);
 export default Payment;

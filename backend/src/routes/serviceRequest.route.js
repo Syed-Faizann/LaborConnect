@@ -1,7 +1,10 @@
-// backend/src/routes/serviceRequest.route.js
 import express from "express";
-import { protectRoute } from "../middleware/auth.middleware.js";
+import { protectRoute, requireCustomerRole } from "../middleware/auth.middleware.js";
 import { companyUpload } from "../middleware/companyUpload.middleware.js";
+import {
+  validateServiceArea,
+  validateWorkersAndPricing,
+} from "../middleware/bookingValidation.middleware.js";
 import {
   createServiceRequest,
   getMyCompanyRequests,
@@ -15,7 +18,15 @@ import {
 const router = express.Router();
 router.use(protectRoute);
 
-router.post("/", companyUpload.single("attachment"), createServiceRequest);
+router.post(
+  "/",
+  requireCustomerRole,
+  companyUpload.single("attachment"),
+  validateServiceArea,
+  validateWorkersAndPricing,
+  createServiceRequest
+);
+
 router.post("/check-coverage", checkCoverage);
 router.get("/me", getMySubmittedRequests);
 router.get("/company/me", getMyCompanyRequests);
